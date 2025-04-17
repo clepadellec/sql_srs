@@ -1,0 +1,15 @@
+.vscode
+.env
+conf.ini
+__pycache__
+data/
+
+*:Zone.Identifier
+ipynb_checkpoints/
+
+*~
+\#*\#
+
+*.log
+*.csv
+*.xlsx
