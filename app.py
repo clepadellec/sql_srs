@@ -10,8 +10,8 @@ con.execute("INSERT INTO students VALUES (1, 'Alice', 85), (2, 'Bob', 78), (3, '
 
 st.header("Mode de Révision SQL")
 
-# Add a selectbox to choose the SQL revision theme
-theme = st.selectbox("Choisissez le thème de révision:", ["Sélection de données", "Agrégation", "Jointures", "Sous-requêtes"])
+# Add a selectbox in the sidebar to choose the SQL revision theme
+theme = st.sidebar.selectbox("Choisissez le thème de révision:", ["Sélection de données", "Agrégation", "Jointures", "Sous-requêtes"])
 
 query = st.text_area("Écrivez votre requête SQL ici:")
 
