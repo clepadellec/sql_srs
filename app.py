@@ -20,12 +20,12 @@ if "exercises_sql_tables.duckdb" not in os.listdir("data"):
 
 con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
-con.execute(open("new_exercise_mappings.sql").read())
+# con.execute(open("new_exercise_mappings.sql").read())
 
-mappings_df = con.execute("SELECT * FROM theme_exercise_mapping").df()
-exercise_name_mapping = dict(
-    zip(mappings_df["exercise_name"], mappings_df["display_name"])
-)
+# mappings_df = con.execute("SELECT * FROM theme_exercise_mapping").df()
+# exercise_name_mapping = dict(
+#     zip(mappings_df["exercise_name"], mappings_df["display_name"])
+# )
 
 
 def check_users_solution(user_query: str):
@@ -74,10 +74,7 @@ if "exercise_name" not in exercises_df or exercises_df["exercise_name"].isnull()
     st.stop()
 
 display_exercises_df = exercises_df.copy()
-display_exercises_df["display_name"] = display_exercises_df["exercise_name"].map(
-    exercise_name_mapping
-)
-
+display_exercises_df["display_name"] = display_exercises_df["exercise_name"]
 exercise_display_name = st.sidebar.selectbox(
     "Sélectionnez un exercice :", display_exercises_df["display_name"].dropna(), index=0
 )
