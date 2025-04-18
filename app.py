@@ -6,14 +6,10 @@ import streamlit as st
 from datetime import date, timedelta
 import pandas as pd
 
-if "data" in os.listdir():
-    print("Suppression du dossier data existant, même s'il n'est pas vide")
-    logging.info("Suppression du dossier data existant, même s'il n'est pas vide")
-    shutil.rmtree("data")
+if not "data" in os.listdir():
+    logging.info("Création du dossier data")
+    os.mkdir("data")
 
-print("Création du dossier data")
-logging.info("Création du dossier data")
-os.mkdir("data")
 
 if "exercises_sql_tables.duckdb" not in os.listdir("data"):
     exec(open("init_db.py").read())
