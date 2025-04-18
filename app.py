@@ -1,78 +1,128 @@
-import streamlit as st
+import os
+import logging
+import shutil
 import duckdb
+import streamlit as st
+from datetime import date, timedelta
 import pandas as pd
 
-# Create a DuckDB in-memory database
-con = duckdb.connect(database=":memory:")
-# Create tables and insert data
-con.execute("CREATE TABLE students (id INTEGER, name TEXT, grade INTEGER)")
-con.execute(
-    "INSERT INTO students VALUES (1, 'Alice', 85), (2, 'Bob', 78), (3, 'Cathy', 92)"
-)
-con.execute("CREATE TABLE courses (student_id INTEGER, course TEXT)")
-con.execute("INSERT INTO courses VALUES (1, 'Math'), (2, 'Science'), (3, 'Literature')")
+if "data" in os.listdir():
+    print("Suppression du dossier data existant, même s'il n'est pas vide")
+    logging.info("Suppression du dossier data existant, même s'il n'est pas vide")
+    shutil.rmtree("data")
 
-st.header("Mode de Révision SQL")
+print("Création du dossier data")
+logging.info("Création du dossier data")
+os.mkdir("data")
 
-theme = st.sidebar.selectbox(
-    "Choisissez le thème de révision:",
-    ["Sélection de données", "Agrégation", "Jointures", "Sous-requêtes"],
-)
+if "exercises_sql_tables.duckdb" not in os.listdir("data"):
+    exec(open("init_db.py").read())
 
-questions = {
-    "Sélection de données": (
-        "SELECT name FROM students WHERE grade > 80",
-        "Quelles sont les étudiantes ayant une note supérieure à 80?",
-    ),
-    "Agrégation": (
-        "SELECT avg(grade) FROM students",
-        "Quelle est la moyenne des notes?",
-    ),
-    "Jointures": (
-        "SELECT s.name, c.course FROM students s JOIN courses c ON s.id = c.student_id",
-        "Liez les étudiants à leurs cours.",
-    ),
-    "Sous-requêtes": (
-        "SELECT name FROM students WHERE grade = (SELECT max(grade) FROM students)",
-        "Quel est l'étudiant avec la meilleure note?",
-    ),
-}
+con = duckdb.connect(database="data/exercises_sql_tables.duckdb", read_only=False)
 
-correct_answer, question = questions[theme]
+# con.execute(open("new_exercise_mappings.sql").read())
 
-st.write(question)
-user_query = st.text_area("Écrivez votre requête SQL ici:")
-expected_result = con.execute(correct_answer).fetch_df()
-if st.button("Vérifier la réponse"):
+# mappings_df = con.execute("SELECT * FROM theme_exercise_mapping").df()
+# exercise_name_mapping = dict(
+#     zip(mappings_df["exercise_name"], mappings_df["display_name"])
+# )
+
+
+def check_users_solution(user_query: str):
+    result = con.execute(user_query).df()
+    st.dataframe(result)
     try:
-        user_result = con.execute(user_query).fetch_df()
+        result = result[solution_df.columns]
+        comparison = result.compare(solution_df)
+        st.dataframe(comparison)
 
-        if user_result.equals(expected_result):
+        if comparison.empty:
             st.success("Correct!")
+            st.balloons()
         else:
-            if set(user_result.columns) == set(expected_result.columns) and len(
-                user_result
-            ) == len(expected_result):
-                st.error(
-                    "Incorrect! Les différences sont mises en évidence ci-dessous."
-                )
-                st.write(user_result.compare(expected_result))
-            else:
-                st.error(
-                    "Incorrect! La structure des résultats ne correspond pas à ce qui est attendu."
-                )
+            st.error("Certaines valeurs sont incorrectes.")
+    except KeyError:
+        st.error("Certaines colonnes sont manquantes")
+    n_lines_difference = result.shape[0] - solution_df.shape[0]
+    if n_lines_difference != 0:
+        st.warning(
+            f"Le résultat a une différence de {n_lines_difference} lignes par rapport à la solution."
+        )
 
-        st.dataframe(user_result)
-    except Exception as e:
-        st.error(f"Erreur dans l'exécution de la requête: {e}")
 
-with st.expander("Détails de l'énoncé"):
-    st.write("**Contenu des tables :**")
-    st.write("**students**")
-    st.dataframe(con.execute("SELECT * FROM students").fetch_df())
-    st.write("**courses**")
-    st.dataframe(con.execute("SELECT * FROM courses").fetch_df())
-    st.write("**Résultat attendu :**")
-    st.dataframe(expected_result)
+st.sidebar.title("Sélection d'exercice")
+available_themes_df = con.execute("SELECT DISTINCT theme FROM memory_state").df()
+theme = st.sidebar.selectbox(
+    "Sélectionnez un thème à réviser :", available_themes_df["theme"].unique(), index=0
+)
 
-con.close()
+if theme:
+    st.sidebar.write(f"Vous avez sélectionné **{theme}**")
+    exercises_query = f"SELECT * FROM memory_state WHERE theme = '{theme}'"
+else:
+    exercises_query = "SELECT * FROM memory_state"
+
+exercises_df = (
+    con.execute(exercises_query)
+    .df()
+    .sort_values("last_reviewed")
+    .reset_index(drop=True)
+)
+
+if "exercise_name" not in exercises_df or exercises_df["exercise_name"].isnull().any():
+    st.error("Certaines données d'exercice manquent.")
+    st.stop()
+
+display_exercises_df = exercises_df.copy()
+display_exercises_df["display_name"] = display_exercises_df["exercise_name"]
+exercise_display_name = st.sidebar.selectbox(
+    "Sélectionnez un exercice :", display_exercises_df["display_name"].dropna(), index=0
+)
+
+exercise_name = display_exercises_df[
+    display_exercises_df["display_name"] == exercise_display_name
+]["exercise_name"].iloc[0]
+st.sidebar.write(f"Exercice sélectionné: **{exercise_display_name}**")
+
+st.title("Exercices pratiques SQL")
+
+exercise_info = exercises_df[exercises_df["exercise_name"] == exercise_name].iloc[0]
+exercise_tables = exercise_info["tables"]
+with st.expander("Détails de l'exercice", expanded=True):
+    st.write(f"**Nom de l'exercice**: {exercise_name}")
+    st.write(f"**Thème**: {theme}")
+    st.write("**Tables pertinentes**:")
+    for table in exercise_tables:
+        st.write(f"**{table}**")
+        df_table = con.execute(f"SELECT * FROM {table}").df()
+        st.dataframe(df_table)
+
+with open(f"answers/{exercise_name}.sql", "r") as f:
+    answer = f.read()
+
+solution_df = con.execute(answer).df()
+
+st.header("Entrez votre requête SQL :")
+query = st.text_area(label="Votre requête SQL", key="user_input", height=200)
+submit_button = st.button("Soumettre la requête")
+
+if submit_button and query:
+    check_users_solution(query)
+
+st.sidebar.header("Planifier la révision")
+for n_days in [2, 7, 21]:
+    if st.sidebar.button(f"Réviser dans {n_days} jours", key=f"review_{n_days}"):
+        next_review = date.today() + timedelta(days=n_days)
+        con.execute(
+            f"UPDATE memory_state SET last_reviewed = '{next_review}' WHERE exercise_name = '{exercise_name}'"
+        )
+        st.success(f"Révision planifiée dans {n_days} jours!")
+        st.experimental_set_query_params()
+if st.sidebar.button("Réinitialiser toutes les révisions"):
+    con.execute("UPDATE memory_state SET last_reviewed = '1970-01-01'")
+    st.success("Tous les plannings de révision ont été réinitialisés!")
+    st.experimental_set_query_params()
+st.sidebar.header("Onglet de solution")
+if st.sidebar.checkbox("Afficher la requête de solution", key="solution"):
+    st.subheader("Requête de solution")
+    st.code(answer, language="sql")
